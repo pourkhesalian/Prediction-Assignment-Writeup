@@ -1,0 +1,127 @@
+---
+title: 'Peer-graded Assignment: Prediction Assignment Writeup'
+author: "Ali Pourkhesalian"
+date: "09/09/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Summary
+This report, is the final assignment from the Practical Machine Learning course, from Coursera. The report is written by R-Markdown. It presents how to fit a predictive Random Forest model on a set of data and to use it to predict the manner in which some excersises were carried out. The model is then applied to the final quiz in the course.
+
+## Introduction
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website [here](http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har ), (see the section on the Weight Lifting Exercise Dataset).
+
+## Required Packages
+```{r packages, comment= FALSE, warning=FALSE, message=FALSE}
+library(knitr)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(randomForest)
+library(corrplot)
+library(gbm)
+```
+
+## Data
+In this section the test and train datasets are downloeaded, cleaned and prepared for later analyses.  
+
+### Datasets
+The training.dataset data for this project are available [here](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv) and the test data are available [here](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv). The data for this project come from [this source](http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har).
+
+### Getting Data and Partitioning
+
+The dataset is downloaded from the URL mentioned only if it is not found in the working directory. The dataset is devided into two datasets, a training set consisting of 70% of the data and a test set which consist the remaining. 
+
+```{r getting , comment= FALSE, warning=FALSE, message=FALSE}
+
+
+train.url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+test.url  <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+train.file<-"pml-traininig.csv"
+test.file<-"pml-testing.csv"
+
+
+if(!file.exists(train.file))download.file(train.url,destfile = train.file)
+training <- read.csv(train.file)
+if(!file.exists(test.file)) download.file(test.url,destfile = test.file)
+testing  <- read.csv(test.file)
+in.train  <- createDataPartition(training$classe, p=0.7, list=FALSE)
+train.dataset <- training[in.train, ]
+test.dataset  <- training[-in.train, ]
+```
+### Cleaning Data
+The next step is to clear the dataset of near zero variance variables and variables being almost all NA. Also the first five colums which are id variables are removed from the datasets.
+
+```{r cleaning , comment= FALSE, warning=FALSE, message=FALSE}
+near.zero.var <- nearZeroVar(train.dataset)
+train.dataset <- train.dataset[, -near.zero.var]
+test.dataset  <- test.dataset[, -near.zero.var]
+
+train.dataset <- train.dataset[, (sapply(train.dataset, function(x) mean(is.na(x))) > 0.95)==FALSE]
+test.dataset  <- test.dataset[, (sapply(train.dataset, function(x) mean(is.na(x))) > 0.95)==FALSE]
+
+train.dataset <- train.dataset[, -(1:5)]
+test.dataset  <- test.dataset[, -(1:5)]
+
+```
+
+## Fitting the Predictive Model
+After fitting and comparing a Decision Tree with a Random Forest and a GBM, the Random Forest model was selected as the most accurate one. The two other models can be seen in the apendix. 
+
+### Random Forest Model
+As Random Forest models benefit from multiple bagging in the process of train the model, there is no need of performing a cross-validation as the process prevents over-fitting. 
+```{r r.f.model }
+
+set.seed(123)
+fit.r.f <- train(classe ~ ., data=train.dataset, method="rf", trControl=trainControl(method="cv", 3), ntree=100)
+fit.r.f$finalModel
+```
+### Model Predictions
+``` {r r.f.predicion}
+predict.r.f <- predict(fit.r.f, newdata=test.dataset)
+confusion.matrix.r.f <- confusionMatrix(predict.r.f, test.dataset$classe)
+confusion.matrix.r.f
+
+prediction.r.f <- predict(fit.r.f, newdata=testing)
+prediction.r.f
+```
+
+## Apendix a, Decision Tree model
+
+
+
+```{r d.t.model}
+
+set.seed(123)
+d.t.model <- rpart(classe ~ ., data=train.dataset, method="class")
+fancyRpartPlot(d.t.model)
+
+d.t.predict <- predict(d.t.model, newdata=test.dataset, type="class")
+d.t.confusion.matrix <- confusionMatrix(d.t.predict, test.dataset$classe)
+d.t.confusion.matrix
+
+```
+## Apendix b, GBM 
+
+```{r glm.model}
+set.seed(123)
+
+g.b.m.model  <- train(classe ~ ., 
+                      data=train.dataset, 
+                      method = "gbm", 
+                      trControl = trainControl(method = "repeatedcv", number = 3, repeats = 1), 
+                      verbose = FALSE)
+
+g.b.m.predict <- predict(g.b.m.model, newdata=test.dataset)
+g.b.m.confusion.matrix <- confusionMatrix(g.b.m.predict, test.dataset$classe)
+g.b.m.confusion.matrix
+
+```
+
+
